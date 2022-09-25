@@ -8,9 +8,9 @@
 #include <unistd.h>
 
 // inodenumber, divnumver, permission, user, filesize, file name
-typedef struct info_set { // 파일 세부정보 구조체
+typedef struct info_set { // 파일 세부정보 저장
     int inonum;           // inode number
-    unsigned long devnum; // device number
+    unsigned long devnum; /* device */
     char permission[11];  // 권한
     char *UID;            // 사용자 ID
     long size;            // 파일 크기
@@ -26,7 +26,7 @@ void SetInfo(info_set *info, char *path, char *name) {
         exit(1);
     }
 
-    if (S_ISDIR(buf.st_mode)) //
+    if (S_ISDIR(buf.st_mode)) 
         info->permission[0] = 'd';
     else if (S_ISCHR(buf.st_mode))
         info->permission[0] = 'c';
@@ -42,7 +42,7 @@ void SetInfo(info_set *info, char *path, char *name) {
         info->permission[0] = '-';
 
     info->permission[1] =
-        ((buf.st_mode & S_IRUSR) != 0 ? 'r' : '-');
+        ((buf.st_mode & S_IRUSR) != 0 ? 'r' : '-'); 
     info->permission[2] = ((buf.st_mode & S_IWUSR) != 0 ? 'w' : '-');
     info->permission[3] = ((buf.st_mode & S_IXUSR) != 0 ? 'x' : '-');
     if (buf.st_mode & S_ISUID)
@@ -63,17 +63,17 @@ void SetInfo(info_set *info, char *path, char *name) {
 
     pwd = getpwuid(buf.st_uid);
 
-    info->UID = pwd->pw_name;
+    info->UID = pwd->pw_name; 
     info->fname = name;
     info->size = buf.st_size;
     info->devnum = buf.st_dev;
     info->inonum = buf.st_ino;
 }
 
-void Is_Finfo(const info_set *info, const int flr, const int dcnt,
-              const int fcnt) {
-    for (int i = 0; i < flr; i++) {
-        fcnt > 0 && dcnt > 0 ? printf("│   ") : printf("   ");
+void Is_Finfo(const info_set *info, int *flr, const int dcnt, const int fcnt,
+              const int idx) {
+    for (int i = 0; i < idx; i++) {
+        flr[i] == 0 ? printf("│   ") : printf("    ");
     }
     fcnt == 0 && dcnt == 0 ? printf("└── ") : printf("├── ");
     printf("[ %d %ld %s %s     %ld]   ", info->inonum, info->devnum,
@@ -81,23 +81,21 @@ void Is_Finfo(const info_set *info, const int flr, const int dcnt,
     printf("%s\n", info->fname);
 }
 
-char *MakePath(char *pathnull, const char *path, const char *dirname) {
-    // if pathnull is not empty, is fail
+char *MakePath(const char *path, const char *dirname) {
+    char *pathnull = (char *)malloc(sizeof(char) * 1024 + sizeof(path));
     strcpy(pathnull, path);
     strcat(pathnull, "/");
     strcat(pathnull, dirname);
     return pathnull;
 }
 
-void Tree(const char *dpath, int floor, int *tdir, int *tfile) {
+void Tree(const char *dpath, int *floor, int *tdir, int *tfile, int *f_idx) {
     DIR *dp = NULL;
     struct dirent *entry = NULL;
     struct stat buf;
 
     info_set *dirs = (info_set *)malloc(sizeof(info_set) * 1024);
     info_set *files = (info_set *)malloc(sizeof(info_set) * 1024);
-
-    // char **dir_path = (char **)malloc(sizeof(char *) * 1024);
 
     int d_cnt = 0;
     int f_cnt = 0;
@@ -111,19 +109,7 @@ void Tree(const char *dpath, int floor, int *tdir, int *tfile) {
 
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
-
-        // make path(dpath + '/' + 'current file name')
-
-        char *path = (char *)malloc(sizeof(char) * 1024 + sizeof(dpath));
-        // memset(*path, 0, sizeof(dpath) + 1024);
-        /*
-        strcpy(path, dpath);
-        strcat(path, "/");
-        strcat(path, entry->d_name);
-        */
-        ///////
-
-        MakePath(path, dpath, entry->d_name);
+        char *path = MakePath(dpath, entry->d_name);
 
         info_set *info_buf = NULL;
 
@@ -137,8 +123,6 @@ void Tree(const char *dpath, int floor, int *tdir, int *tfile) {
             f_cnt++;
         } else if (S_ISDIR(buf.st_mode)) { // dir
             info_buf = &dirs[d_cnt];
-            // dir_path[d_cnt] = path;
-            //  strcpy(dir_path[d_cnt], path);
             d_cnt++;
         }
 
@@ -148,30 +132,28 @@ void Tree(const char *dpath, int floor, int *tdir, int *tfile) {
     }
 
     for (int j = 0; j < f_cnt; j++) { // file
-        Is_Finfo(&(files[j]), floor, d_cnt, f_cnt - j - 1);
+        Is_Finfo(&(files[j]), floor, d_cnt, f_cnt - j - 1, *f_idx);
     }
 
     for (int i = 0; i < d_cnt; i++) { // dir
-        Is_Finfo(&(dirs[i]), floor, d_cnt - i - 1, 0);
-        floor++;
-        char *newdirpath = (char *)malloc(sizeof(char) * 1024);
-        MakePath(newdirpath, dpath, dirs[i].fname);
-        // Tree(dir_path[i], floor);
+        Is_Finfo(&(dirs[i]), floor, d_cnt - i - 1, 0, *f_idx);
+        if (d_cnt - i - 1 == 0) {
+            floor[*f_idx] = 1;
+        }
+        (*f_idx)++;
+        char *newdirpath = MakePath(dpath, dirs[i].fname);
         *tdir += d_cnt;
         *tfile += f_cnt;
-        Tree(newdirpath, floor, tdir, tfile);
+        Tree(newdirpath, floor, tdir, tfile, f_idx);
 
         free(newdirpath);
-        floor--;
+        floor[*f_idx] = 0;
+        (*f_idx)--;
     }
-
-    // if (floor == 0) {
-    //     printf("\n\n%d directories, %d files\n", d_cnt, f_cnt);
-    // }
 
     free(files);
     free(dirs);
-    // free(dir_path);
+
     closedir(dp);
     return;
 }
@@ -180,13 +162,20 @@ int main(int argc, char *argv[]) {
     char *cwd = (char *)malloc(sizeof(char) * 1024);
     getcwd(cwd, 1024);
 
-    int floor = 0;
+    int *floor = (int *)malloc(sizeof(int) * 1024);
+    int *f_idx = NULL;
+
+    memset(floor, 0, 1024);
     int total_dir = 0;
     int total_file = 0;
 
-    Tree(cwd, floor, &total_dir, &total_file);
+    int idx = 0;
+    f_idx = &idx;
+
+    Tree(cwd, floor, &total_dir, &total_file, f_idx);
     printf("\n%d directories, %d files\n", total_dir, total_file);
 
+    free(floor);
     free(cwd);
     return 0;
 }
